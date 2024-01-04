@@ -9,7 +9,7 @@ use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
 
-struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
+struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey, u16);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
@@ -22,6 +22,20 @@ impl BlockStateProvider for SimpleBlockstateProvider {
 
     fn get_light_level(&self, _x: i32, _y: i16, _z: i32) -> LightLevel {
         LightLevel::from_sky_and_block(15, 15)
+    }
+
+    fn get_block_color(&self, x: i32, y: i16, z: i32, tint_index: i32) -> [u8; 3] {
+        let block = if let ChunkBlockState::State(state) = self.get_state(x, y, z) {
+            state.block
+        } else {
+            return [255; 3];
+        };
+
+        if block == self.2 {
+            [39, 114, 40]
+        } else {
+            [255; 3]
+        }
     }
 
     fn is_section_empty(&self, _index: usize) -> bool {
@@ -46,13 +60,19 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, block) = bm.blocks.get_full("minecraft:furnace").unwrap();
+    let (index, _, block) = bm.blocks.get_full("minecraft:anvil").unwrap();
 
-    let (_, augment) = block
+    // let (grass_index, _, _) = bm.blocks.get_full("minecraft:grass_block").unwrap();
+
+    // dbg!(&block);
+
+    let (mesh, augment) = block
         .get_model_by_key(
             [
                 ("facing", &StateValue::String("north".into())),
-                ("lit", &StateValue::Bool(true)),
+                // ("lit", &StateValue::Bool(true)),
+                // ("snowy", &StateValue::Bool(false)),
+                // ("layers", &StateValue::String("1".into())),
             ],
             &*wm.mc.resource_provider,
             &atlas,
@@ -66,6 +86,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
             block: index as u16,
             augment,
         },
+        999
     );
 
     let chunk = Chunk::new([0, 0]);

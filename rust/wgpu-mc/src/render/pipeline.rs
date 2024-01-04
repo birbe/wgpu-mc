@@ -21,7 +21,7 @@ pub struct Vertex {
     pub position: [f32; 3],
     pub uv: [u16; 2],
     pub normal: [f32; 3],
-    pub color: u32,
+    pub color: [u8; 4],
     pub uv_offset: u32,
     pub lightmap_coords: u8,
     pub dark: bool,
@@ -62,9 +62,9 @@ impl Vertex {
         array[2] = z_byte;
 
         //color
-        array[3] = (self.color & 0xf) as u8;
-        array[4] = ((self.color >> 8) & 0xf) as u8;
-        array[5] = ((self.color >> 16) & 0xf) as u8;
+        array[3] = self.color[0];
+        array[4] = self.color[1];
+        array[5] = self.color[2];
 
         //U
         array[6] = self.uv[0].to_le_bytes()[0];

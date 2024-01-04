@@ -157,7 +157,7 @@ public class WgpuNative {
 
     public static native void clearPalette(long l);
 
-    public static native void createChunk(int x, int z, long palettePtrs, long storagePtrs, long blockLightPtr, long skyLightPtr);
+    public static native void createChunk(int x, int z, long palettePtrs, long storagePtrs, long blockLightPtr, long skyLightPtr, long grassColor);
 
     public static native void destroyPaletteStorage(long paletteStorage);
 

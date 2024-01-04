@@ -140,8 +140,8 @@ impl RenderLayer for TerrainLayer {
         |_| true
     }
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> Vertex {
-        |vert, x, y, z, _light, dark| Vertex {
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool, [u8; 3]) -> Vertex {
+        |vert, x, y, z, _light, dark, color| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,
@@ -149,7 +149,7 @@ impl RenderLayer for TerrainLayer {
             ],
             uv: vert.tex_coords,
             normal: [vert.normal[0], vert.normal[1], vert.normal[2]],
-            color: u32::MAX,
+            color: [color[0], color[1], color[2], 255],
             uv_offset: vert.animation_uv_offset,
             lightmap_coords: 0,
             dark,
@@ -176,13 +176,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
         .store(Arc::new(vec![Box::new(TerrainLayer)]));
 
     let chunk = make_chunks(&wm);
-
-    // {
-    //     wm.mc
-    //         .chunk_store
-    //         .chunks
-    //         .insert([0, 0], ArcSwap::new(Arc::new(chunk)));
-    // }
+    wm.mc.chunk_store.add_chunk([0, 0], chunk);
+    wm.submit_chunk_updates();
 
     let mut frame_start = Instant::now();
 

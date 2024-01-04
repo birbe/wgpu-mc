@@ -19,7 +19,7 @@ use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
 use wgpu::{BufferAddress, BufferUsages};
 
-use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
+use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, Face, ModelMesh};
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 use crate::util::BindableBuffer;
@@ -58,12 +58,12 @@ impl ChunkStore {
     pub fn add_chunk(&self, pos: ChunkPos, chunk: Chunk) -> usize {
         let len = self.chunk_count.fetch_add(1, Ordering::Release);
 
+        self.chunks[len].store(Arc::new(Some(chunk)));
+
         {
             let mut indices = self.indices.write();
             indices.insert(pos, len);
         }
-
-        self.chunks[len].store(Arc::new(Some(chunk)));
 
         len
     }
@@ -97,13 +97,15 @@ pub trait BlockStateProvider: Send + Sync {
 
     fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel;
 
+    fn get_block_color(&self, x: i32, y: i16, z: i32, tint_index: i32) -> [u8; 3];
+
     fn is_section_empty(&self, index: usize) -> bool;
 }
 
 pub trait RenderLayer: Send + Sync {
     fn filter(&self) -> fn(BlockstateKey) -> bool;
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> Vertex;
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool, [u8; 3]) -> Vertex;
 
     fn name(&self) -> &str;
 }
@@ -145,8 +147,6 @@ impl Chunk {
         let mut vertices = 0;
         let mut vertex_data = Vec::new();
         let mut index_data = Vec::new();
-
-        // let mut out = stdout().lock();
 
         let baked_layers = layers
             .iter()
@@ -311,7 +311,7 @@ pub fn bake_section_layer<
     T,
     Provider: BlockStateProvider,
     Filter: Fn(BlockstateKey) -> bool,
-    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> T,
+    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool, [u8; 3]) -> T,
 >(
     block_manager: &BlockManager,
     chunk: &Chunk,
@@ -386,9 +386,17 @@ pub fn bake_section_layer<
                 let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
                 let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
 
-                let mut extend_vertices = |index: u32, light_level: LightLevel| {
+                let mut extend_vertices = |face: Face, light_level: LightLevel| {
                     let vec_index = vertices.len();
-                    vertices.extend((index..index + 4).map(|vert_index| {
+
+                    let color = if face.tint_index != -1 {
+                        state_provider.get_block_color(absolute_x, y, absolute_z, face.tint_index)
+                    } else {
+                        //Face color defaults to white
+                        [255; 3]
+                    };
+
+                    vertices.extend((face.vert_index..face.vert_index + 4).map(|vert_index| {
                         mapper(
                             &model.vertices[vert_index as usize],
                             xf32,
@@ -396,6 +404,7 @@ pub fn bake_section_layer<
                             zf32,
                             light_level,
                             false,
+                            color
                         )
                     }));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
@@ -433,6 +442,7 @@ pub fn bake_section_layer<
                 if let (true, Some(face)) = (render_up, &model.up) {
                     let light_level: LightLevel =
                         state_provider.get_light_level(absolute_x, y + 1, absolute_z);
+
                     extend_vertices(*face, light_level);
                 }
 
@@ -455,9 +465,17 @@ pub fn bake_section_layer<
                 ]
                 .iter()
                 .filter_map(|face| *face)
-                .for_each(|index| {
+                .for_each(|face| {
                     let vec_index = vertices.len();
-                    vertices.extend((index..index + 4).map(|vert_index| {
+
+                    let color = if face.tint_index != -1 {
+                        state_provider.get_block_color(absolute_x, y, absolute_z, face.tint_index)
+                    } else {
+                        //Face color defaults to white
+                        [255; 3]
+                    };
+
+                    vertices.extend((face.vert_index..face.vert_index + 4).map(|vert_index| {
                         mapper(
                             &model.vertices[vert_index as usize],
                             xf32,
@@ -465,6 +483,7 @@ pub fn bake_section_layer<
                             zf32,
                             light_level,
                             false,
+                            color
                         )
                     }));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));

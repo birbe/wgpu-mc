@@ -122,17 +122,20 @@ static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     augment: 0,
 });
 
+pub type BlockColorProvider = (dyn Fn(&MinecraftBlockstateProvider, i32, i16, i32, i32, &[[u8; 4]; 256]) -> [u8; 3] + Send + Sync);
+
+static BLOCK_COLORS: OnceCell<Vec<(u16, Box<BlockColorProvider>)>> = OnceCell::new();
+
 static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::new());
 pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
-#[derive(Debug)]
 struct ChunkHolder {
     pub sections: [Option<(JavaPalette, PackedIntegerArray)>; 24],
     pub light_data: Option<DeserializedLightData>,
+    pub grass_color: [[u8; 4]; 256]
 }
 
-#[derive(Debug)]
 struct MinecraftBlockstateProvider<'a> {
     pub center: &'a ChunkHolder,
     pub west: Option<&'a ChunkHolder>,
@@ -140,6 +143,7 @@ struct MinecraftBlockstateProvider<'a> {
     pub south: Option<&'a ChunkHolder>,
     pub east: Option<&'a ChunkHolder>,
 
+    pub color_map: &'a [(u16, Box<BlockColorProvider>)],
     pub pos: ChunkPos,
 
     pub air: BlockstateKey,
@@ -236,6 +240,24 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         LightLevel::from_sky_and_block(sky_light, block_light)
     }
 
+    fn get_block_color(&self, x: i32, y: i16, z: i32, tint_index: i32) -> [u8; 3] {
+        let block = if let ChunkBlockState::State(state) = self.get_state(x, y, z) {
+            state.block
+        } else {
+            panic!("Tried to get color of air")
+        };
+
+        let bcp = match self.color_map.iter().find(|(block_key, _)| *block_key == block) {
+            None => return [255; 3],
+            Some((_, bcp)) => bcp
+        };
+
+        let local_x = x & 0b1111;
+        let local_z = z & 0b1111;
+
+        bcp(self, local_x, y, local_z, tint_index, &self.center.grass_color)
+    }
+
     fn is_section_empty(&self, index: usize) -> bool {
         if index >= SECTIONS_PER_CHUNK {
             return true;
@@ -317,15 +339,13 @@ pub fn getSettings(env: JNIEnv, _class: JClass) -> jstring {
     env.new_string(json).unwrap().into_raw()
 }
 
-/// Returns true if succeeded and false if not.
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn sendSettings(mut env: JNIEnv, _class: JClass, settings: JString) -> bool {
     let json: String = env.get_string(&settings).unwrap().into();
     if let Ok(settings) = serde_json::from_str(json.as_str()) {
-        THREAD_POOL.spawn(|| {
-            let mut guard = SETTINGS.write();
-            *guard = Some(settings);
-        });
+        let mut guard = SETTINGS.write();
+        *guard = Some(settings);
+
         true
     } else {
         false
@@ -380,7 +400,13 @@ pub fn createChunk(
     storages_ptr: jlong,
     block_light_ptr: jlong,
     sky_light_ptr: jlong,
+    grass_color: jlong
 ) {
+    #[repr(align(4))]
+    struct GrassColor {
+        data: [[u8; 4]; 256]
+    }
+
     let palettes = unsafe { &*(palettes_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK]) };
 
     let storages = unsafe { &*(storages_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK]) };
@@ -390,6 +416,9 @@ pub fn createChunk(
 
     let sky_light =
         unsafe { (sky_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read() };
+
+    // let grass_color = unsafe { (grass_color as usize as *mut [[u8; 4]; 256]).read() };
+    let grass_color = unsafe { Box::from_raw(grass_color as usize as *mut GrassColor) };
 
     assert_eq!(size_of::<usize>(), 8);
 
@@ -415,6 +444,7 @@ pub fn createChunk(
             block_light,
             sky_light,
         }),
+        grass_color: grass_color.data
     };
 
     let mut write = CHUNKS.write();
@@ -451,6 +481,7 @@ pub fn bake_chunk(x: i32, z: i32) {
         south: neighbors[1].as_ref().map(|arc| &**arc),
         west: neighbors[2].as_ref().map(|arc| &**arc),
         east: neighbors[3].as_ref().map(|arc| &**arc),
+        color_map: BLOCK_COLORS.get().unwrap(),
         pos: [x, z],
         air: *AIR,
     };
@@ -486,7 +517,7 @@ pub fn clearChunks(_env: JNIEnv, _class: JClass) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    bake_chunk(x, z);
+    THREAD_POOL.spawn(move || bake_chunk(x, z));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -531,6 +562,20 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
 
     let block_manager = wm.mc.block_manager.write();
     let mut mappings = Vec::new();
+
+    //Grass block
+    let (grass_block_index, _, _) = block_manager.blocks.get_full("minecraft:grass_block").unwrap();
+
+    let grass_color = Box::new(|mbsp: &MinecraftBlockstateProvider, x: i32, y: i16, z: i32, tint_index: i32, grass: &[[u8; 4]; 256]| -> [u8; 3] {
+        let index = (x * 16) + z;
+        let color = grass[index as usize];
+        // [0x64, 0x98, 0x36]
+        [color[0], color[1], color[2]]
+    });
+
+    BLOCK_COLORS.set(vec![
+        (grass_block_index as u16, grass_color.clone()),
+    ]);
 
     states
         .iter()

@@ -43,7 +43,11 @@ struct VertexResult {
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
     @location(4) world_pos: vec3<f32>,
-    @location(5) light_coords: vec2<u32>
+    @location(5) light_coords: vec2<u32>,
+    @location(6) color: vec3<f32>,
+    @location(7) r: u32,
+    @location(8) g: u32,
+    @location(9) b: u32,
 };
 
 @vertex
@@ -64,6 +68,14 @@ fn vert(
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
     var z: f32 = f32((v1 >> 16u) & 0xffu) * 0.0625;
+
+    var r: f32 = f32((v1 >> 24u)) / 255.0;
+    var g: f32 = f32(v2 & 0xffu) / 255.0;
+    var b: f32 = f32((v2 >> 8u) & 0xffu) / 255.0;
+
+    vr.r = v1 >> 24u;
+    vr.g = v2 & 0xffu;
+    vr.b = (v2 >> 8u) & 0xffu;
 
     var u: f32 = f32((v2 >> 16u) & 0xffffu) * 0.00048828125;
     var v: f32 = f32(v3 & 0xffffu) * 0.00048828125;
@@ -89,6 +101,7 @@ fn vert(
     vr.tex_coords = vec2<f32>(u, v);
     vr.light_coords = vec2<u32>(v4 & 15u, (v4 >> 4u) & 15u);
     vr.blend = 0.0;
+    vr.color = vec3(r, g, b);
 
     return vr;
 }
@@ -98,9 +111,9 @@ fn frag(
     in: VertexResult
 ) -> @location(0) vec4<f32> {
     let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
-    let col2 = textureSample(t_texture, t_sampler, in.tex_coords2);
 
-    let col = mix(col1, col2, in.blend);
+//    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
+    let color = vec4(in.color, 1.0);
 
-    return col1;
+    return col1 * color;
 }

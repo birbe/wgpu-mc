@@ -33,6 +33,7 @@ public class TitleScreenMixin {
     @Inject(method = "render", at = @At("HEAD"))
     private void render(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if (!updatedTitle && Wgpu.isInitialized()) {
+            Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 
             Thread bakeBlocks = new Thread(WgpuNative::cacheBlockStates);
             bakeBlocks.setContextClassLoader(Thread.currentThread().getContextClassLoader());

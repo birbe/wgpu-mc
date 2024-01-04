@@ -46,7 +46,8 @@ struct VertexResult {
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
     @location(4) world_pos: vec3<f32>,
-    @location(5) @interpolate(flat) light_coords: vec2<f32>
+    @location(5) @interpolate(flat) light_coords: vec2<f32>,
+    @location(6) color: vec3<f32>
 };
 
 @vertex
@@ -68,8 +69,13 @@ fn vert(
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
     var z: f32 = f32((v1 >> 16u) & 0xffu) * 0.0625;
 
+    var r: f32 = f32(v1 >> 24u) / 255.0;
+    var g: f32 = f32(v2 & 0xffu) / 255.0;
+    var b: f32 = f32((v2 >> 8u) & 0xffu) / 255.0;
+
     var u: f32 = f32((v2 >> 16u) & 0xffffu) * 0.00048828125;
     var v: f32 = f32(v3 & 0xffffu) * 0.00048828125;
+
 
     if(((v3 >> 61u) & 1u) == 1u) {
         x = 16.0;
@@ -91,6 +97,7 @@ fn vert(
     vr.tex_coords = vec2<f32>(u, v);
     vr.tex_coords2 = vec2(0.0, 0.0);
     vr.world_pos = world_pos;
+    vr.color = vec3(r, g, b);
 
     var light_coords = vec2<u32>(v4 & 15u, (v4 >> 4u) & 15u);
     vr.light_coords = vec2(f32(light_coords.x) / 15.0, f32(light_coords.y) / 15.0);
@@ -112,6 +119,7 @@ fn frag(
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
     let light = max(in.light_coords.x, in.light_coords.y);
+    let color = vec4(in.color, 1.0);
 
-    return vec4(light, light, light, 1.0) * col1;
+    return vec4(light, light, light, 1.0) * color * col1;
 }

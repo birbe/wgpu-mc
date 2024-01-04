@@ -3,12 +3,15 @@ package dev.birb.wgpu.rust;
 import dev.birb.wgpu.palette.RustPalette;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import net.minecraft.client.world.ClientWorld;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.collection.IndexedIterable;
 import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.util.collection.PaletteStorage;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.ChunkSectionPos;
+import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PalettedContainer;
@@ -44,6 +47,16 @@ public class WmChunk {
         ByteBuffer blockBytes = MemoryUtil.memAlloc(2048 * 24);
 
         ChunkPos pos = this.worldChunk.getPos();
+
+        long grassColorBytes = MemoryUtil.nmemAlignedAlloc(4,16 * 16 * 4);
+
+        for(int x = 0; x < 16; x++) {
+            for(int z = 0; z < 16; z++) {
+                int color = ((ClientWorld) this.worldChunk.getWorld()).calculateColor(new BlockPos((this.x * 16) + x, 0, (this.z * 16) + z), Biome::getGrassColorAt);
+                long offset = ((x * 16) + z) * 4;
+                MemoryUtil.memPutInt(grassColorBytes + offset, color);
+            }
+        }
 
         for (int i = 0; i < 24; i++) {
             Palette<?> palette;
@@ -103,10 +116,11 @@ public class WmChunk {
         }
 
         Thread thread = new Thread(() -> {
-            WgpuNative.createChunk(this.x, this.z, paletteIndices.address0(), storageIndices.address0(), MemoryUtil.memAddress0(blockBytes), MemoryUtil.memAddress0(skyBytes));
+            WgpuNative.createChunk(this.x, this.z, paletteIndices.address0(), storageIndices.address0(), MemoryUtil.memAddress0(blockBytes), MemoryUtil.memAddress0(skyBytes), grassColorBytes);
             WgpuNative.bakeChunk(this.x, this.z);
         });
 
-        thread.start();
+        MemoryUtil.nmemAlignedFree(grassColorBytes);
+
     }
 }
