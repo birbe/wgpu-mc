@@ -402,10 +402,10 @@ pub fn createChunk(
     sky_light_ptr: jlong,
     grass_color: jlong
 ) {
-    #[repr(align(4))]
-    struct GrassColor {
-        data: [[u8; 4]; 256]
-    }
+    // #[repr(align(4))]
+    // struct GrassColor {
+    //     data: [[u8; 4]; 256]
+    // }
 
     let palettes = unsafe { &*(palettes_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK]) };
 
@@ -417,8 +417,8 @@ pub fn createChunk(
     let sky_light =
         unsafe { (sky_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read() };
 
-    // let grass_color = unsafe { (grass_color as usize as *mut [[u8; 4]; 256]).read() };
-    let grass_color = unsafe { Box::from_raw(grass_color as usize as *mut GrassColor) };
+    let grass_color = unsafe { (grass_color as usize as *mut [[u8; 4]; 256]).read() };
+    // let grass_color = unsafe { Box::from_raw(grass_color as usize as *mut GrassColor) };
 
     assert_eq!(size_of::<usize>(), 8);
 
@@ -444,7 +444,7 @@ pub fn createChunk(
             block_light,
             sky_light,
         }),
-        grass_color: grass_color.data
+        grass_color
     };
 
     let mut write = CHUNKS.write();
