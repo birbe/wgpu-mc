@@ -120,6 +120,9 @@ public class WmChunk {
             WgpuNative.bakeChunk(this.x, this.z);
         });
 
+        thread.setPriority(8);
+        thread.start();
+
         MemoryUtil.nmemAlignedFree(grassColorBytes);
 
     }

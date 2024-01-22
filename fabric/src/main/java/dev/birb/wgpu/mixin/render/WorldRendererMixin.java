@@ -1,7 +1,7 @@
 package dev.birb.wgpu.mixin.render;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import dev.birb.wgpu.entity.DummyVertexConsumer;
-import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -12,13 +12,11 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.resource.ResourceManager;
+import net.minecraft.util.math.ColorHelper;
 import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.tick.TickManager;
-
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
@@ -29,10 +27,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import com.mojang.blaze3d.systems.RenderSystem;
-
-import com.mojang.blaze3d.systems.RenderSystem;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -236,13 +230,19 @@ public abstract class WorldRendererMixin {
     }
 
     public void bindRenderEffectsData(float[] fogColorOverride) {
+        fogColorOverride = fogColorOverride == null ? new float[4] : fogColorOverride;
+
+        float[] shaderFogColorf = RenderSystem.getShaderFogColor();
+        float[] shaderColorf = RenderSystem.getShaderColor();
+
         WgpuNative.bindRenderEffectsData(
             RenderSystem.getShaderFogStart(), 
             RenderSystem.getShaderFogEnd(), 
-            RenderSystem.getShaderFogShape().getId(), 
-            RenderSystem.getShaderFogColor(),
-            RenderSystem.getShaderColor(),
-            fogColorOverride == null ? new float[4] : fogColorOverride);
+            RenderSystem.getShaderFogShape().getId(),
+            ColorHelper.Argb.getArgb((int) shaderFogColorf[0] * 255,(int) shaderFogColorf[1] * 255,(int) shaderFogColorf[2] * 255,(int) shaderFogColorf[3] * 255),
+            ColorHelper.Argb.getArgb((int) shaderColorf[0] * 255,(int) shaderColorf[1] * 255,(int) shaderColorf[2] * 255,(int) shaderColorf[3] * 255),
+            ColorHelper.Argb.getArgb((int) fogColorOverride[0] * 255,(int) fogColorOverride[1] * 255,(int) fogColorOverride[2] * 255,(int) fogColorOverride[3] * 255)
+        );
     }
 
 }

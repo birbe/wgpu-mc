@@ -11,6 +11,7 @@ use std::sync::atomic::Ordering;
 
 use arc_swap::access::Access;
 use arc_swap::{ArcSwap, ArcSwapAny};
+use bytemuck::{Pod, Zeroable};
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use dashmap::mapref::multiple::RefMulti;
 use parking_lot::RwLock;
@@ -1303,6 +1304,19 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
     }
 }
 
+#[derive(Copy, Clone, Pod, Zeroable)]
+#[repr(C)]
+struct EnvironmentData {
+    //Contains a padding of zero at the end
+    fog_start_end_shape: [f32; 4],
+    fog_color: [u8; 4],
+    dimension_fog_color: [u8; 4],
+    sky_color: [u8; 4],
+    sky_angle: f32,
+    sky_brightness: f32,
+    star_shimmer: f32,
+}
+
 pub fn set_push_constants(
     mc_state: &MinecraftState,
     pipeline: &PipelineConfig,
@@ -1313,13 +1327,6 @@ pub fn set_push_constants(
     section_y: Option<usize>,
     parts_per_entity: Option<u32>,
 ) {
-    let sky = mc_state.sky_data.load();
-    let render_effects = mc_state.render_effects.load();
-
-    //janky way of "still loading boi!"
-    if render_effects.fog_color.is_empty() {
-        return;
-    }
     pipeline
         .push_constants
         .iter()
@@ -1349,29 +1356,37 @@ pub fn set_push_constants(
                 bytemuck::cast_slice(&[parts_per_entity.unwrap()]),
             ),
             // Note: vecs are broke, so we have to pass data individual for now
-            "wm_pc_environment_data" => render_pass.set_push_constants(
-                ShaderStages::VERTEX_FRAGMENT,
-                *offset as u32,
-                bytemuck::cast_slice(&[
-                    sky.angle,
-                    sky.brightness,
-                    sky.star_shimmer,
-                    render_effects.fog_start,
-                    render_effects.fog_end,
-                    render_effects.fog_shape,
-                    render_effects.fog_color[0],
-                    render_effects.fog_color[1],
-                    render_effects.fog_color[2],
-                    render_effects.fog_color[3],
-                    sky.color_r,
-                    sky.color_g,
-                    sky.color_b,
-                    render_effects.dimension_fog_color[0],
-                    render_effects.dimension_fog_color[1],
-                    render_effects.dimension_fog_color[2],
-                    render_effects.dimension_fog_color[3],
-                ]),
-            ),
+            "wm_pc_environment_data" => {
+                let sky = mc_state.sky_data.load();
+                let render_effects = mc_state.render_effects.load();
+
+                //Still loading
+                if render_effects.fog_color.is_empty() {
+                    return;
+                }
+
+                render_pass.set_push_constants(
+                    ShaderStages::VERTEX_FRAGMENT,
+                    *offset as u32,
+                    bytemuck::cast_slice(&[
+                        EnvironmentData {
+                            fog_start_end_shape: [
+                                render_effects.fog_start,
+                                render_effects.fog_end,
+                                render_effects.fog_shape,
+                                0.0
+                            ],
+                            fog_color: render_effects.fog_color,
+                            dimension_fog_color: render_effects.dimension_fog_color,
+                            //RGB
+                            sky_color: [sky.color[0], sky.color[1], sky.color[2], 0],
+                            sky_angle: sky.angle,
+                            sky_brightness: sky.brightness,
+                            star_shimmer: sky.star_shimmer,
+                        }
+                    ]),
+                )
+            },
             _ => unimplemented!("Unknown push constant resource value"),
         });
 }

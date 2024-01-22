@@ -26,6 +26,7 @@ use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoopBuilder;
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::platform::scancode::PhysicalKeyExtScancode;
+use winit::window::Window;
 
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
@@ -37,7 +38,7 @@ use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
-use wgpu_mc::WmRenderer;
+use wgpu_mc::{WgpuState, WmRenderer};
 use wgpu_mc::{wgpu, WindowSize};
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
@@ -137,6 +138,74 @@ pub fn scheduleStop(_env: JNIEnv, _class: JClass) {
     let _ = SHOULD_STOP.set(());
 }
 
+pub fn init_wgpu(window: Arc<Window>, vsync: bool) -> WgpuState {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::PRIMARY,
+        ..Default::default()
+    });
+
+    let surface = instance.create_surface(window.clone()).unwrap();
+
+    let adapter = block_on(instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: false,
+            compatible_surface: Some(&surface),
+        }))
+        .unwrap();
+
+    let limits = wgpu::Limits {
+        max_push_constant_size: 128,
+        max_bind_groups: 8,
+        ..Default::default()
+    };
+
+    let (device, queue) = block_on(adapter
+        .request_device(
+            &wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::default()
+                    | wgpu::Features::DEPTH_CLIP_CONTROL
+                    | wgpu::Features::PUSH_CONSTANTS,
+                required_limits: limits,
+            },
+            None, // Trace path
+        ))
+        .unwrap();
+
+    let (width, height) = (window.inner_size().width, window.inner_size().height);
+
+    let surface_caps = surface.get_capabilities(&adapter);
+    let surface_config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: wgpu::TextureFormat::Bgra8Unorm,
+        width,
+        height,
+        present_mode: if vsync {
+            wgpu::PresentMode::AutoVsync
+        } else {
+            wgpu::PresentMode::Immediate
+        },
+
+        desired_maximum_frame_latency: 2,
+        alpha_mode: surface_caps.alpha_modes[0],
+        view_formats: vec![],
+    };
+
+    surface.configure(&device, &surface_config);
+
+    WgpuState {
+        surface: RwLock::new((Some(surface), surface_config)),
+        adapter,
+        device,
+        queue,
+        size: Some(ArcSwap::new(Arc::new(WindowSize {
+            width,
+            height
+        }))),
+    }
+}
+
 pub fn start_rendering(mut env: JNIEnv, title: JString) {
     let title: String = env.get_string(&title).unwrap().into();
 
@@ -173,9 +242,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     let wrapper = &WinitWindowWrapper { window: &window };
 
-    let wgpu_state = block_on(WmRenderer::init_wgpu(
-        wrapper, true, // super::SETTINGS.read().as_ref().unwrap().vsync.value,
-    ));
+    let wgpu_state = init_wgpu(window.clone(), false);
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap(),
@@ -931,9 +998,11 @@ pub fn bindSkyData(
     moon_phase: jint,
 ) {
     let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
-    sky_data.color_r = r;
-    sky_data.color_g = g;
-    sky_data.color_b = b;
+    sky_data.color = [
+        (r * 255.0) as u8,
+        (g * 255.0) as u8,
+        (b * 255.0) as u8
+    ];
     sky_data.angle = angle;
     sky_data.brightness = brightness;
     sky_data.star_shimmer = star_shimmer;
@@ -951,9 +1020,9 @@ pub fn bindRenderEffectsData(
     fog_start: jfloat,
     fog_end: jfloat,
     fog_shape: jint,
-    fog_color: JFloatArray,
-    color_modulator: JFloatArray,
-    dimension_fog_color: JFloatArray,
+    fog_color: jint,
+    color_modulator: jint,
+    dimension_fog_color: jint,
 ) {
     let mut render_effects_data = RenderEffectsData {
         fog_start,
@@ -962,23 +1031,10 @@ pub fn bindRenderEffectsData(
         ..Default::default()
     };
 
-    let mut fog_color_vec = vec![0f32; env.get_array_length(&fog_color).unwrap() as usize];
-    env.get_float_array_region(&fog_color, 0, &mut fog_color_vec[..])
-        .unwrap();
+    render_effects_data.fog_color = fog_color.to_be_bytes();
+    render_effects_data.color_modulator = color_modulator.to_be_bytes();
+    render_effects_data.dimension_fog_color = dimension_fog_color.to_be_bytes();
 
-    let mut color_modulator_vec =
-        vec![0f32; env.get_array_length(&color_modulator).unwrap() as usize];
-    env.get_float_array_region(&color_modulator, 0, &mut color_modulator_vec[..])
-        .unwrap();
-
-    let mut dimension_fog_color_vec =
-        vec![0f32; env.get_array_length(&dimension_fog_color).unwrap() as usize];
-    env.get_float_array_region(&dimension_fog_color, 0, &mut dimension_fog_color_vec[..])
-        .unwrap();
-
-    render_effects_data.fog_color = fog_color_vec;
-    render_effects_data.color_modulator = color_modulator_vec;
-    render_effects_data.dimension_fog_color = dimension_fog_color_vec;
 
     RENDERER
         .get()

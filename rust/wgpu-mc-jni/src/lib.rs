@@ -518,7 +518,9 @@ pub fn clearChunks(_env: JNIEnv, _class: JClass) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    THREAD_POOL.spawn(move || bake_chunk(x, z));
+    // THREAD_POOL.spawn(move || {
+        bake_chunk(x, z)
+    // });
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

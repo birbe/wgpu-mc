@@ -19,10 +19,7 @@ struct PushConstants {
     fog_start: f32,
     fog_end: f32,
     fog_shape: f32,
-    fog_color_r: f32,
-    fog_color_g: f32,
-    fog_color_b: f32,
-    fog_color_a: f32,
+    fog_color: vec4<f32>,
     color_modulator_r: f32,
     color_modulator_g: f32,
     color_modulator_b: f32,
@@ -81,5 +78,5 @@ fn linear_fog(color: vec4<f32>, vertex_distance: f32) -> vec4<f32> {
         fog_value = smoothstep(data.fog_start, data.fog_end, vertex_distance);
     }
 
-    return vec4(mix(color.rgb, vec3(data.fog_color_r, data.fog_color_g, data.fog_color_b), fog_value * data.fog_color_a), color.a);
+    return vec4(mix(color.rgb, data.fog_color.rgb, fog_value * data.fog_color.w), color.a);
 }

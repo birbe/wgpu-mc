@@ -155,9 +155,7 @@ pub struct BlockInstance {
 
 #[derive(Default, Clone)]
 pub struct SkyData {
-    pub color_r: f32,
-    pub color_g: f32,
-    pub color_b: f32,
+    pub color: [u8; 3],
     pub angle: f32,
     pub brightness: f32,
     pub star_shimmer: f32,
@@ -170,9 +168,10 @@ pub struct RenderEffectsData {
     pub fog_start: f32,
     pub fog_end: f32,
     pub fog_shape: f32,
-    pub fog_color: Vec<f32>,
-    pub color_modulator: Vec<f32>,
-    pub dimension_fog_color: Vec<f32>,
+    //ARGB
+    pub fog_color: [u8; 4],
+    pub color_modulator: [u8; 4],
+    pub dimension_fog_color: [u8; 4],
 }
 
 /// Minecraft-specific state and data structures go in here

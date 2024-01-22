@@ -4,6 +4,5 @@ resolver = "2"
 
 members = [
     "wgpu-mc",
-    "wgpu-mc-jni",
-    "wgpu-mc-demo"
+    "wgpu-mc-jni"
 ]
