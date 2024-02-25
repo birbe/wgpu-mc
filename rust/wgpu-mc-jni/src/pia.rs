@@ -34,8 +34,6 @@ impl PackedIntegerArray {
     }
 
     pub fn get_by_index(&self, index: i32) -> i32 {
-        assert!(index < self.size, "index: {}, size: {}", index, self.size);
-
         let i: i32 = self.compute_storage_index(index);
 
         let l: i64 = self.data[i as usize];

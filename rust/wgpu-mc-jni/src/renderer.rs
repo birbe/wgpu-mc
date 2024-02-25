@@ -37,7 +37,7 @@ use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
+use wgpu_mc::wgpu::{Backends, BufferUsages, TextureFormat};
 use wgpu_mc::{WgpuState, WmRenderer};
 use wgpu_mc::{wgpu, WindowSize};
 
@@ -140,7 +140,7 @@ pub fn scheduleStop(_env: JNIEnv, _class: JClass) {
 
 pub fn init_wgpu(window: Arc<Window>, vsync: bool) -> WgpuState {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::PRIMARY,
+        backends: wgpu::util::backend_bits_from_env().unwrap_or(Backends::PRIMARY),
         ..Default::default()
     });
 
