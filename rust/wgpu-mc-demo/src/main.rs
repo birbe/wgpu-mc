@@ -99,7 +99,7 @@ fn main() {
     let required_limits = wgpu::Limits {
         max_push_constant_size: 128,
         max_bind_groups: 8,
-        max_storage_buffers_per_shader_stage: 100000,
+        max_storage_buffers_per_shader_stage: 65000,
         ..Default::default()
     };
 
@@ -239,10 +239,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
         },
     );
 
-    for x in 0..20 {
-        for z in 0..20 {
-            let section = make_chunks(&wm, [x, 0, z].into());
-            scene.chunk_sections.insert([x, 0, z].into(), section);
+    for x in 0..35 {
+        for y in 0..24 {
+            for z in 0..35 {
+                let section = make_chunks(&wm, [x, y, z].into());
+                scene.chunk_sections.insert([x, y, z].into(), section);
+            }
         }
     }
 
@@ -332,7 +334,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
                                 bytemuck::cast_slice(&view),
                             );
 
-                            camera.position += camera.get_direction() * forward * 0.01;
+                            camera.position += camera.get_direction() * forward;
 
                             let mut surface_guard = wm.wgpu_state.surface.write();
                             let (surface, ref mut config) = &mut *surface_guard;

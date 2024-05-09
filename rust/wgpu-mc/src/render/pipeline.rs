@@ -261,7 +261,7 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
-                        count: NonZeroU32::new(40000),
+                        count: NonZeroU32::new(30000),
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
@@ -271,7 +271,7 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
-                        count: NonZeroU32::new(40000),
+                        count: NonZeroU32::new(30000),
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
